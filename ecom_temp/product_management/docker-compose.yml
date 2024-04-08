@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  flask_app:
+    container_name: flask_app
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - DB_URL=sqlite:///product.db  # Using SQLite URL for local development
+    depends_on:
+      - flask_db
+    volumes:
+      - .:/app
+
+  flask_db:
+    container_name: flask_db
+    image: python:3.8  # Use the official Python image
+    command: ["tail", "-f", "/dev/null"]  # Keep the container running indefinitely
+    volumes:
+      - "./product.db:/product.db"
+
+volumes:
+  pgdata: {}
