@@ -1,63 +1,82 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
-from sqlalchemy import create_engine
+from flask import Flask, render_template, request, flash, redirect, url_for
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from db import Base, User
 
-import sys
-sys.path.append("D:/cc_proj_flask/ecom_temp")  # Adjust the path accordingly
-# from product_management.db import Products, Cart
+# Database connection details
+DATABASE_URI = 'sqlite:///product.db'
 
-# from product_management.app import app
+# Define database table structure (using plain text password storage - NOT RECOMMENDED)
+Base = declarative_base()
 
+class User(Base):
+    __tablename__ = 'users'
 
-app = Flask(__name__)
-app.secret_key = '123'  # Change this to a secret key of your choice
+    id = Column(Integer, primary_key=True)
+    username = Column(String(50), unique=True, nullable=False)
+    password = Column(String(50), nullable=False)
 
-engine = create_engine('sqlite:///D:/cc_proj_flask/ecom_temp/product.db')
+# Create the engine and database tables (if they don't exist)
+engine = create_engine(DATABASE_URI)
 Base.metadata.create_all(engine)
-DBSession = sessionmaker(bind=engine)
-session = DBSession()
 
+# Create a sessionmaker for database interactions
+Session = sessionmaker(bind=engine)
 
-@app.route('/', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        user = session.query(User).filter_by(username=username, password=password).first()
-        if user:
-            # User authenticated, redirect to home page or dashboard
-            flash('Login successful!', 'success')
-            # return redirect(url_for('login'))
-            return redirect(url_for('login'))
-        else:
-            flash('Invalid username or password', 'error')
-            return redirect(url_for('login'))
-    return render_template('login.html')
+app = Flask(__name__, template_folder='templates')
+app.secret_key = '123'  # Add a secret key for session management
 
-@app.route('/signup', methods=['GET', 'POST'])
+@app.route('/', methods=['GET', 'POST'])  # Signup route at the root URL (handles GET and POST)
 def signup():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+        # Create a database session
+        session = Session()
+
         # Check if username already exists
         existing_user = session.query(User).filter_by(username=username).first()
         if existing_user:
-            flash('Username already exists', 'error')
+            flash('Username already exists!', 'danger')
+            session.close()
             return redirect(url_for('signup'))
-        else:
-            # Create new user
-            username = request.form.get('username')
-            password = request.form.get('password')
-            new_user = User(username=username, password=password)
-            session.add(new_user)
-            session.commit()
-            flash('Account created successfully! You can now log in', 'success')
-            print("user added")
-            return redirect(url_for('login'))
+
+        # Create a new user object
+        new_user = User(username=username, password=password)  # Plain text password storage (NOT RECOMMENDED)
+
+        # Add the new user to the database
+        session.add(new_user)
+        session.commit()
+        session.close()
+
+        flash('Signup successful!', 'success')
+        return redirect(url_for('signup'))  # Redirect to signup page after successful registration (can be changed)
+
     return render_template('signup.html')
 
+@app.route('/login', methods=['GET', 'POST'])  # Login route
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
 
+        # Create a database session
+        session = Session()
+
+        # Check if user exists
+        user = session.query(User).filter_by(username=username).first()
+        session.close()
+
+        if user and user.password == password:  # Plain text password comparison (NOT RECOMMENDED)
+            # Login successful, print message or redirect
+            print("Login successful!")  # Print success message to the console
+            flash('Login successful!', 'success')  # Optionally, flash a success message for the user
+            # return redirect(url_for('index'))  # Replace with desired location after login (commented out)
+        else:
+            flash('Invalid username or password!', 'danger')
+
+    return render_template('login.html')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0')

@@ -1,17 +1,17 @@
-from flask import Flask, render_template, redirect, url_for, request, flash
-from sqlalchemy import Column, Integer, String, Boolean, BLOB, ForeignKey
+from flask import Flask, render_template, request
+from sqlalchemy import create_engine, Column, Integer, String,BLOB,Boolean,ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, relationship
-from flask_login import UserMixin, LoginManager, login_user, logout_user, current_user, login_required
-from werkzeug.utils import secure_filename
+from sqlalchemy.orm import sessionmaker
+from flask import Flask, redirect, flash, render_template, url_for  # Other imports you might need
 
-app = Flask(__name__)
-app.secret_key = "1234"
+# Configure database connection
+
+DATABASE_URI = 'sqlite:///product.db'
+
 
 Base = declarative_base()
-
-class Products(Base, UserMixin):
+# Define product model
+class Product(Base):
     __tablename__ = "products"
     id = Column(Integer, primary_key=True)
     image = Column(BLOB, nullable=False)
@@ -21,69 +21,88 @@ class Products(Base, UserMixin):
     tax = Column(Integer, nullable=False)
     inCart = Column(Boolean, nullable=False)
 
-class Cart(Base, UserMixin):
-    __tablename__ = "cart"
+# Define cart model with explicit table name (if implemented)
+class Cart(Base):
+    __tablename__ = 'cart'
+
     id = Column(Integer, primary_key=True)
     product_id = Column(Integer, ForeignKey('products.id'), nullable=False)
+    # Add other cart-related columns if needed (quantity, size, etc.)
 
-# Use the same create_engine instance for both models
-engine = create_engine('sqlite:///product.db')
+# Create database tables if they don't exist (one-time setup)
+# @app.before_app_first_request
+# def create_tables():
+#     db.create_all()
+engine = create_engine(DATABASE_URI)
 Base.metadata.create_all(engine)
-print("Database created successfully")
 
-engine = create_engine('sqlite:///product.db', connect_args={'check_same_thread': False}, echo=True)
-DBSession = sessionmaker(bind=engine)
-session = DBSession()
-Base.metadata.bind = engine
+# Create a sessionmaker for database interactions
+Session = sessionmaker(bind=engine)
 
-def write_file(data, filename):
-    # Convert binary data to proper format and write it on Hard Disk
-    with open(filename, 'wb') as file:
-        file.write(data)
+app = Flask(__name__, template_folder='templates')
+app.secret_key = "123"
 
-@app.route('/', methods=['GET', 'POST'])
-@app.route('/product', methods=['GET', 'POST'])
+@app.route('/')
+def index():
+    # Fetch all products from the database
+    session = Session()
+
+    # Retrieve all product IDs from the database
+    products = session.query(Product).all()
+
+    # Close the session
+    session.close()
+    return render_template('index.html', data=products)
+
+@app.route('/product')
 def viewProducts():
-    dbData = session.query(Products).all()
-    for i in dbData:
-        no = "photo" + str(i.id)
-        write_file(i.image, "static/images" + no + ".jpg")
-    return render_template('index.html', data=dbData)
+    # Alternative route to display products (optional)
+    # You can use the same logic as in index()
+    session = Session()
+
+    # Retrieve all product IDs from the database
+    products = session.query(Product).all()
+
+    # Close the session
+    session.close()
+    return render_template('index.html', data=products)
 
 @app.route('/<int:r_id>/view', methods=['GET', 'POST'])
 def viewDetails(r_id):
-    dbData = session.query(Products).all()
-    return render_template('viewDetails.html', id=r_id, details=dbData)
+    with Session() as session:
+        product = session.query(Product).get(r_id)
+        if product is None:
+            flash('Product not found!', category='error')
+            return redirect(url_for('index'))
+    
+
+    return render_template('viewDetails.html', product=product)
+
 
 @app.route('/<int:r_id>/sample', methods=['GET', 'POST'])
-def sample(r_id):
-    # Fetch all products
-    dbData = session.query(Products).all()
+def addToCart(r_id):
+    with Session() as session:  # Create and close session automatically
+        # Retrieve product details based on product ID
+        product = session.query(Product).get(r_id)
 
-    # Fetch the product to update
-    update_this = session.query(Products).filter_by(id=r_id).first()
+        if product is None:
+            flash('Product not found!', category='error')
+            return redirect(url_for('index'))
 
-    if request.method == 'POST':
-        # Check if the product is already in the cart
-        product_in_cart = session.query(Cart).filter_by(product_id=r_id).first()
+        # Check if product already exists in cart (using session)
+        if session.query(Cart).filter_by(product_id=r_id).first() is not None:
+            flash('Product already exists in cart!', category='warning')
+            return redirect(url_for('viewDetails', r_id=r_id))
 
-        if product_in_cart:
-            flash('Product already added to cart!', 'warning')
-        else:
-            # Append the product ID to the cart
-            cart_product = Cart(product_id=r_id)
-            session.add(cart_product)
-            session.commit()
-            flash('Product added to cart successfully!', 'success')
+        # Add product to cart
+        new_cart_item = Cart(product_id=product.id)
+        session.add(new_cart_item)
+        session.commit()
+        flash('Product added to cart!', category='success')
+        return redirect(url_for('viewDetails', r_id=r_id))
 
-        # Redirect to the same route to avoid form resubmission
-        return redirect(url_for('sample', r_id=r_id))
+# Define a Cart model if you want to implement cart functionality (optional)
 
-    # Toggle the 'inCart' status of the product
-    update_this.inCart = not update_this.inCart
-    session.commit()
-
-    return render_template('viewDetails.html', id=r_id, details=dbData)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0')
