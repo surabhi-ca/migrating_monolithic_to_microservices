@@ -1,0 +1,22 @@
+docker build -t your-image-name:tag .
+docker run -p 8080:80 your-image-name:tag
+docker tag your_local_image:tag your_repository_url/your_image_name:tag
+docker tag user_docker:latest docker.io/surabhica/user_docker:latest
+docker login docker.io
+docker push your_repository_url/your_image_name:tag
+
+
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+kubectl get pods
+kubectl get service
+kubectl get nodes -o wide
+http://localhost:31041
+http://localhost:30021
+http://localhost:32000
+http://localhost:30041
+
+kubectl get svc <service-name>
+
+kubectl delete deployment <product-deployment>
+kubectl delete service <product-service>
